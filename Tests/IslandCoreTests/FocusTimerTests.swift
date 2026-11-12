@@ -92,6 +92,45 @@ final class FocusTimerTests: XCTestCase {
         XCTAssertEqual(makeTimer().preset.id, "50/10")
     }
 
+    func testCustomLengthIsUsedClampedAndRemembered() {
+        let t = makeTimer()
+        XCTAssertFalse(t.isCustom)
+        t.setCustom(focusMinutes: 40, restMinutes: 8)
+        XCTAssertTrue(t.isCustom)
+        XCTAssertEqual(t.remaining, 40 * 60)
+
+        t.start()
+        advance(40 * 60, t)
+        XCTAssertEqual(t.phase, .rest)
+        XCTAssertEqual(t.remaining, 8 * 60)
+        XCTAssertEqual(t.todayFocusSeconds, 40 * 60)
+
+        let reopened = makeTimer()
+        XCTAssertTrue(reopened.isCustom)
+        XCTAssertEqual(reopened.preset.id, "40/8")
+
+        reopened.setCustom(focusMinutes: 999, restMinutes: 0)
+        XCTAssertEqual(reopened.customPreset.id, "180/1")
+    }
+
+    func testCustomLengthIsKeptWhileBuiltInPresetIsSelected() {
+        let t = makeTimer()
+        t.setCustom(focusMinutes: 33, restMinutes: 7)
+        t.preset = FocusPreset.all[0]
+        let reopened = makeTimer()
+        XCTAssertFalse(reopened.isCustom)
+        XCTAssertEqual(reopened.customPreset.id, "33/7")
+    }
+
+    func testChangingCustomWhileRunningDoesNotDisturbTheTimer() {
+        let t = makeTimer()
+        t.start()
+        advance(60, t)
+        t.setCustom(focusMinutes: 90, restMinutes: 15)
+        XCTAssertEqual(t.remaining, 24 * 60)
+        XCTAssertEqual(t.preset.id, "25/5")
+    }
+
     func testStatsPersistForTodayButResetNextDay() {
         let t = makeTimer()
         t.start()

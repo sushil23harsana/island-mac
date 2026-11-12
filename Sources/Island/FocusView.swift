@@ -94,24 +94,37 @@ struct FocusView: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 SectionTitle("Session")
-                HStack(spacing: 6) {
-                    ForEach(FocusPreset.all) { preset in
-                        let selected = preset == timer.preset
-                        Button { timer.preset = preset } label: {
-                            Text(preset.id)
-                                .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
-                                .foregroundStyle(.white.opacity(selected ? 1 : 0.55))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .background(Capsule().fill(.white.opacity(selected ? 0.16 : 0.06)))
-                                .contentShape(Capsule())
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ForEach(FocusPreset.all) { preset in
+                            presetChip(preset.id, selected: preset == timer.preset) { timer.preset = preset }
                         }
-                        .buttonStyle(.plain)
-                        .disabled(timer.isActive)
+                    }
+                    HStack(spacing: 6) {
+                        presetChip("Custom", symbol: "slider.horizontal.3", selected: timer.isCustom) {
+                            timer.preset = timer.customPreset
+                        }
+                        if !timer.isCustom {
+                            Text(timer.customPreset.id)
+                                .font(.system(size: 11).monospacedDigit())
+                                .foregroundStyle(.white.opacity(0.35))
+                        }
+                    }
+                    if timer.isCustom {
+                        MinuteStepper(label: "Focus", value: timer.customPreset.focusMinutes, step: 5,
+                                      range: FocusPreset.focusRange, tint: Theme.focus) {
+                            timer.setCustom(focusMinutes: $0, restMinutes: timer.customPreset.restMinutes)
+                        }
+                        MinuteStepper(label: "Break", value: timer.customPreset.restMinutes, step: 1,
+                                      range: FocusPreset.restRange, tint: Theme.rest) {
+                            timer.setCustom(focusMinutes: timer.customPreset.focusMinutes, restMinutes: $0)
+                        }
                     }
                 }
+                .disabled(timer.isActive)
                 .opacity(timer.isActive ? 0.5 : 1)
-                Text(timer.isActive ? "Reset to change length" : "Focus / break minutes")
+                Text(timer.isActive ? "Reset to change length"
+                     : timer.isCustom ? "Type a number or use − +" : "Focus / break minutes")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.35))
             }
@@ -141,6 +154,26 @@ struct FocusView: View {
             .foregroundStyle(.white.opacity(0.3))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func presetChip(_ title: String, symbol: String? = nil, selected: Bool,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
+                }
+                Text(title)
+                    .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+            }
+            .foregroundStyle(selected ? Theme.focus : .white.opacity(0.55))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(selected ? Theme.focus.opacity(0.18) : .white.opacity(0.06)))
+            .overlay(Capsule().strokeBorder(Theme.focus.opacity(selected ? 0.3 : 0), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var focusTimeText: String {
@@ -195,5 +228,66 @@ private struct CircleButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+/// "Focus  −  [45]  +  min": type a number or nudge it with the buttons.
+private struct MinuteStepper: View {
+    let label: String
+    let value: Int
+    let step: Int
+    let range: ClosedRange<Int>
+    let tint: Color
+    let onChange: (Int) -> Void
+
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 38, alignment: .leading)
+            nudge("minus", by: -step)
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit())
+                .frame(width: 38, height: 22)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.white.opacity(0.1)))
+                .focused($editing)
+                .onSubmit(commit)
+                .onChange(of: editing) { _, isEditing in if !isEditing { commit() } }
+            nudge("plus", by: step)
+            Text("min")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
+        }
+        .onAppear { text = "\(value)" }
+        .onChange(of: value) { _, new in text = "\(new)" }
+    }
+
+    private func nudge(_ symbol: String, by delta: Int) -> some View {
+        Button {
+            // Snap to the step grid first (e.g. 42 → 45 with a step of 5).
+            let snapped = delta > 0 ? (value / step + 1) * step : ((value - 1) / step) * step
+            onChange(min(max(snapped, range.lowerBound), range.upperBound))
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.75))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.white.opacity(0.1)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func commit() {
+        if let typed = Int(text.trimmingCharacters(in: .whitespaces)) {
+            onChange(typed) // the timer clamps it to the allowed range
+        }
+        text = "\(value)"
     }
 }

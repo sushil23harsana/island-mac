@@ -15,6 +15,22 @@ public struct FocusPreset: Equatable, Hashable, Identifiable, Sendable {
         rest = TimeInterval(restMinutes * 60)
     }
 
+    /// Parses an id like "45/10". Returns nil if it isn't two sensible numbers.
+    public init?(id: String) {
+        let parts = id.split(separator: "/").compactMap { Int($0) }
+        guard parts.count == 2,
+              FocusPreset.focusRange.contains(parts[0]),
+              FocusPreset.restRange.contains(parts[1]) else { return nil }
+        self.init(focusMinutes: parts[0], restMinutes: parts[1])
+    }
+
+    public var focusMinutes: Int { Int(focus / 60) }
+    public var restMinutes: Int { Int(rest / 60) }
+
+    /// Allowed lengths for a custom session.
+    public static let focusRange = 1...180
+    public static let restRange = 1...60
+
     public static let all: [FocusPreset] = [
         FocusPreset(focusMinutes: 25, restMinutes: 5),   // classic Pomodoro
         FocusPreset(focusMinutes: 50, restMinutes: 10),  // long study block
@@ -46,6 +62,21 @@ public final class FocusTimer: ObservableObject {
         }
     }
 
+    /// The user's own focus/break length, remembered even while a built-in preset is selected.
+    @Published public private(set) var customPreset: FocusPreset
+
+    /// True when the custom length (not one of the built-in presets) is selected.
+    public var isCustom: Bool { !FocusPreset.all.contains(preset) }
+
+    /// Changes the custom length (clamped to the allowed ranges) and selects it when idle.
+    public func setCustom(focusMinutes: Int, restMinutes: Int) {
+        let f = min(max(focusMinutes, FocusPreset.focusRange.lowerBound), FocusPreset.focusRange.upperBound)
+        let r = min(max(restMinutes, FocusPreset.restRange.lowerBound), FocusPreset.restRange.upperBound)
+        customPreset = FocusPreset(focusMinutes: f, restMinutes: r)
+        defaults.set(customPreset.id, forKey: Keys.custom)
+        if state == .idle && phase == .focus { preset = customPreset }
+    }
+
     /// Called when a phase runs out (not when it is skipped or reset).
     public var onPhaseFinished: ((FocusPhase) -> Void)?
 
@@ -55,6 +86,7 @@ public final class FocusTimer: ObservableObject {
 
     private enum Keys {
         static let preset = "focus.preset"
+        static let custom = "focus.custom"
         static let day = "focus.day"
         static let sessions = "focus.sessions"
         static let seconds = "focus.seconds"
@@ -64,7 +96,11 @@ public final class FocusTimer: ObservableObject {
         self.now = now
         self.defaults = defaults
         let savedID = defaults.string(forKey: Keys.preset)
-        let preset = FocusPreset.all.first { $0.id == savedID } ?? FocusPreset.all[0]
+        let custom = defaults.string(forKey: Keys.custom).flatMap(FocusPreset.init(id:))
+            ?? FocusPreset(focusMinutes: 45, restMinutes: 10)
+        let preset = FocusPreset.all.first { $0.id == savedID }
+            ?? (savedID == custom.id ? custom : FocusPreset.all[0])
+        customPreset = custom
         self.preset = preset
         remaining = preset.focus
         loadTodayStats()

@@ -202,6 +202,11 @@ final class IslandController: ObservableObject {
             try? await Task.sleep(for: .milliseconds(800))
             write("expanded")
             tab = .focus
+            let builtIn = focus.preset
+            focus.preset = focus.customPreset
+            try? await Task.sleep(for: .milliseconds(600))
+            write("focus-custom")
+            focus.preset = builtIn
             focus.start()
             try? await Task.sleep(for: .milliseconds(1500))
             write("focus")
