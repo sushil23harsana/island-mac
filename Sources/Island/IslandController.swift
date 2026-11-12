@@ -134,6 +134,18 @@ final class IslandController: ObservableObject {
             }
             try? await Task.sleep(for: .milliseconds(500))
             write("collapsed")
+            // Second opinion on colors: SwiftUI's own renderer (cacheDisplay can mis-tint SF Symbols).
+            let pill = CollapsedView()
+                .frame(width: geometry.pillSize.width, height: geometry.pillSize.height)
+                .background(Color.black)
+                .environmentObject(self).environmentObject(store).environmentObject(focus)
+                .environment(\.colorScheme, .dark)
+            let renderer = ImageRenderer(content: pill)
+            renderer.scale = 2
+            if let tiff = renderer.nsImage?.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: directory).appendingPathComponent("pill-swiftui.png"))
+            }
             expand()
             try? await Task.sleep(for: .milliseconds(800))
             write("expanded")

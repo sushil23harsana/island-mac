@@ -12,11 +12,9 @@ struct IslandView: View {
         expanded ? IslandGeometry.expandedSize : controller.geometry.pillSize
     }
 
-    private var shape: UnevenRoundedRectangle {
-        let r: CGFloat = expanded ? 26 : 14
-        return UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: r,
-                                      bottomTrailingRadius: r, topTrailingRadius: 0,
-                                      style: .continuous)
+    private var shape: IslandShape {
+        IslandShape(ear: expanded ? IslandGeometry.expandedEar : IslandGeometry.pillEar,
+                    radius: expanded ? 30 : 13)
     }
 
     var body: some View {
@@ -25,7 +23,8 @@ struct IslandView: View {
                 ExpandedView()
                     .frame(width: IslandGeometry.expandedSize.width,
                            height: IslandGeometry.expandedSize.height)
-                    .transition(.opacity.animation(.easeOut(duration: 0.18).delay(0.06)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                        .animation(.easeOut(duration: 0.2).delay(0.05)))
             } else {
                 CollapsedView()
                     .frame(width: controller.geometry.pillSize.width,
@@ -38,12 +37,20 @@ struct IslandView: View {
         .background(
             shape
                 .fill(Color.black)
-                .shadow(color: .black.opacity(expanded ? 0.5 : 0), radius: 18, y: 8)
+                .shadow(color: .black.opacity(expanded ? 0.55 : 0), radius: 22, y: 10)
+        )
+        .overlay(
+            // Hairline rim that fades in toward the bottom, so the island reads as a solid object.
+            shape
+                .stroke(LinearGradient(colors: [.clear, .white.opacity(0.16)],
+                                       startPoint: .top, endPoint: .bottom), lineWidth: 1)
+                .opacity(expanded ? 1 : 0)
         )
         .overlay(
             // Glow when a focus block or break finishes.
             shape
                 .stroke(focus.phase.tint, lineWidth: 2)
+                .shadow(color: focus.phase.tint.opacity(0.8), radius: 6)
                 .opacity(controller.flash ? 1 : 0)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -56,52 +63,62 @@ struct CollapsedView: View {
     @EnvironmentObject private var controller: IslandController
     @EnvironmentObject private var store: NotesStore
     @EnvironmentObject private var focus: FocusTimer
+    @State private var hovered = false
 
     private var showTimer: Bool { focus.isActive }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             Image(systemName: showTimer ? focus.phase.symbol : "note.text")
+                .symbolRenderingMode(.monochrome)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(showTimer ? focus.phase.tint : .yellow)
+                .foregroundStyle(showTimer ? focus.phase.tint : Theme.notes)
             if !controller.geometry.hasNotch {
                 Text(showTimer ? focus.phase.label : "Notes")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
             }
             Spacer(minLength: controller.geometry.notchWidth)
             if showTimer {
-                HStack(spacing: 3) {
-                    if focus.isPaused {
-                        Image(systemName: "pause.fill").font(.system(size: 8))
-                    }
-                    Text(focus.remaining.countdownText)
-                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                }
-                .foregroundStyle(.white.opacity(focus.isPaused ? 0.5 : 0.9))
+                Text(focus.remaining.countdownText)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white.opacity(focus.isPaused ? 0.5 : 0.92))
+                MiniRing(progress: focus.progress, tint: focus.phase.tint, paused: focus.isPaused)
             } else {
                 Text("\(store.notes.count)")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 18, minHeight: 16)
+                    .background(Capsule().fill(.white.opacity(0.14)))
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12 + IslandGeometry.pillEar)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) {
-            if showTimer {
-                // Thin progress line along the bottom of the pill.
-                GeometryReader { geo in
-                    Capsule()
-                        .fill(focus.phase.tint)
-                        .frame(width: max(geo.size.width * focus.progress, 3), height: 2)
-                }
-                .frame(height: 2)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 3)
-            }
-        }
+        .background(Color.white.opacity(hovered ? 0.07 : 0))
         .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovered)
         .onTapGesture { controller.expand() }
         .help("Open Island (⌥Space)")
+    }
+}
+
+/// Tiny progress ring for the pill.
+private struct MiniRing: View {
+    let progress: Double
+    let tint: Color
+    let paused: Bool
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(.white.opacity(0.16), lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: max(progress, 0.02))
+                .stroke(tint.opacity(paused ? 0.5 : 1), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 1), value: progress)
+        }
+        .frame(width: 13, height: 13)
     }
 }

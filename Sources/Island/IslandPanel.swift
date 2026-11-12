@@ -31,7 +31,10 @@ final class IslandPanel: NSPanel {
 
 /// Works out pill / expanded sizes and where the window goes on a given screen.
 struct IslandGeometry {
-    static let expandedSize = CGSize(width: 620, height: 420)
+    /// Width of the outward "ears" where the island meets the top edge.
+    static let pillEar: CGFloat = 6
+    static let expandedEar: CGFloat = 10
+    static let expandedSize = CGSize(width: 620 + expandedEar * 2, height: 424)
     /// Transparent margin around the expanded island so its shadow isn't clipped.
     static let shadowPadding: CGFloat = 30
 
@@ -54,9 +57,9 @@ struct IslandGeometry {
 
     var pillSize: CGSize {
         if hasNotch {
-            return CGSize(width: notchWidth + 90, height: screen.safeAreaInsets.top)
+            return CGSize(width: notchWidth + 90 + Self.pillEar * 2, height: screen.safeAreaInsets.top)
         }
-        return CGSize(width: 210, height: 32)
+        return CGSize(width: 214 + Self.pillEar * 2, height: 32)
     }
 
     func windowFrame(expanded: Bool) -> NSRect {

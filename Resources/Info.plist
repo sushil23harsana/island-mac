@@ -8,6 +8,8 @@
     <string>Island</string>
     <key>CFBundleExecutable</key>
     <string>Island</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>dev.island.app</string>
     <key>CFBundlePackageType</key>

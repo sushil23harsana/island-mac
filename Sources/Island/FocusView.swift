@@ -21,8 +21,7 @@ struct FocusView: View {
                 .frame(width: 200)
                 .padding(16)
         }
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.04)))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .card()
     }
 
     // MARK: Ring
@@ -30,17 +29,19 @@ struct FocusView: View {
     private var ring: some View {
         ZStack {
             Circle()
-                .stroke(.white.opacity(0.08), lineWidth: 10)
+                .stroke(.white.opacity(0.07), lineWidth: 10)
             Circle()
                 .trim(from: 0, to: timer.progress)
                 .stroke(timer.phase.tint.gradient,
                         style: StrokeStyle(lineWidth: 10, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .shadow(color: timer.phase.tint.opacity(0.55), radius: 9)
                 .animation(.linear(duration: 1), value: timer.progress)
 
             VStack(spacing: 4) {
                 Label(timer.phase.label, systemImage: timer.phase.symbol)
-                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(timer.phase.tint)
                 Text(timer.remaining.countdownText)
                     .font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
@@ -75,7 +76,8 @@ struct FocusView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.black)
                     .frame(width: 110, height: 34)
-                    .background(Capsule().fill(timer.phase.tint))
+                    .background(Capsule().fill(timer.phase.tint.gradient)
+                        .shadow(color: timer.phase.tint.opacity(0.45), radius: 8, y: 2))
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -169,7 +171,8 @@ private struct SessionDots: View {
         HStack(spacing: 5) {
             ForEach(0..<max(goal, count), id: \.self) { i in
                 Circle()
-                    .fill(i < count ? Color.orange : .white.opacity(0.1))
+                    .fill(i < count ? Theme.focus : .white.opacity(0.1))
+                    .shadow(color: Theme.focus.opacity(i < count ? 0.6 : 0), radius: 3)
                     .frame(width: 9, height: 9)
             }
         }

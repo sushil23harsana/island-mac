@@ -27,8 +27,7 @@ struct ClipboardView: View {
                     .frame(width: 1)
                 preview
             }
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.04)))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .card()
         }
         .onAppear {
             selection = visibleItems.first?.id
@@ -57,7 +56,7 @@ struct ClipboardView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.08)))
+            .field()
 
             if confirmClear {
                 Text("Clear unpinned?")
@@ -138,7 +137,7 @@ struct ClipboardView: View {
                     monitor.requestAutoPastePermission()
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.yellow.opacity(0.85))
+                .foregroundStyle(Theme.clipboard.opacity(0.85))
                 .help("Lets Island press ⌘V for you (Settings → Privacy & Security → Accessibility)")
             }
             Spacer()
@@ -178,7 +177,7 @@ struct ClipboardView: View {
                 HStack(spacing: 8) {
                     Spacer()
                     IconButton(symbol: item.pinned ? "pin.fill" : "pin", help: item.pinned ? "Unpin (⌘P)" : "Pin (⌘P)",
-                               tint: item.pinned ? .yellow : nil) {
+                               tint: item.pinned ? Theme.notes : nil) {
                         history.togglePin(item.id)
                     }
                     IconButton(symbol: "trash", help: "Delete (⌘⌫)") { delete(item.id) }
@@ -188,7 +187,7 @@ struct ClipboardView: View {
                             .foregroundStyle(.black)
                             .padding(.horizontal, 12)
                             .frame(height: 28)
-                            .background(Capsule().fill(.yellow))
+                            .background(Capsule().fill(Theme.clipboard))
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -260,7 +259,7 @@ struct ClipboardView: View {
                     Button("Open in browser") { NSWorkspace.shared.open(url) }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundStyle(.yellow.opacity(0.85))
+                        .foregroundStyle(Theme.clipboard.opacity(0.85))
                 }
             }
         }
@@ -337,16 +336,12 @@ private struct ClipRow: View {
             if item.pinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(.yellow.opacity(0.8))
+                    .foregroundStyle(Theme.notes)
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? Color.yellow.opacity(0.18) : .clear)
-        )
-        .contentShape(Rectangle())
+        .rowBackground(selected: selected, accent: Theme.clipboard)
     }
 
     private var subtitle: String {
@@ -387,7 +382,7 @@ private struct ClipRow: View {
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.white.opacity(0.65))
             .frame(width: 28, height: 28)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.08)))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.white.opacity(0.09)))
     }
 }
 

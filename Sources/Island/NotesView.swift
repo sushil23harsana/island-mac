@@ -29,8 +29,7 @@ struct NotesView: View {
                     .frame(width: 1)
                 editor
             }
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.04)))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .card()
         }
         .onAppear {
             if store.note(selection) == nil { selection = store.notes.first?.id }
@@ -50,7 +49,7 @@ struct NotesView: View {
         HStack(spacing: 10) {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(.yellow)
+                .foregroundStyle(Theme.notes)
             TextField("Capture a thought…", text: $capture)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
@@ -62,7 +61,7 @@ struct NotesView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.08)))
+        .field()
     }
 
     // MARK: Sidebar
@@ -87,7 +86,7 @@ struct NotesView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.07)))
 
             ScrollView {
                 LazyVStack(spacing: 2) {
@@ -150,6 +149,7 @@ struct NotesView: View {
                 }
                 TextEditor(text: $draft)
                     .font(.system(size: 13.5))
+                    .lineSpacing(3)
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)
                     .focused($focus, equals: .editor)
@@ -224,7 +224,7 @@ private struct NoteRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(note.title)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.92))
                 .lineLimit(1)
             HStack(spacing: 4) {
@@ -240,10 +240,6 @@ private struct NoteRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selected ? Color.yellow.opacity(0.18) : .clear)
-        )
-        .contentShape(Rectangle())
+        .rowBackground(selected: selected, accent: Theme.notes)
     }
 }
