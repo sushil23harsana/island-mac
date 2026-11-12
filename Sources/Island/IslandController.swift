@@ -12,12 +12,18 @@ final class IslandController: ObservableObject {
         case notes = "Notes"
         case focus = "Focus"
         case clipboard = "Clipboard"
+        case shelf = "Shelf"
+        case now = "Now"
+        case ports = "Ports"
 
         var symbol: String {
             switch self {
             case .notes: "note.text"
             case .focus: "timer"
             case .clipboard: "doc.on.clipboard"
+            case .shelf: "tray.full"
+            case .now: "sparkles"
+            case .ports: "network"
             }
         }
     }
@@ -66,6 +72,18 @@ final class IslandController: ObservableObject {
     let store = NotesStore()
     let focus = FocusTimer()
     let clipboard: ClipboardMonitor
+    let reminders: ReminderStore
+    let shelf: ShelfStore
+    let nowPlaying = NowPlayingMonitor()
+    let calendar = CalendarMonitor()
+    let power = PowerMonitor()
+    let keepAwake = KeepAwake()
+    let portsModel = PortsModel()
+    let audioOutput = AudioOutputMonitor()
+    /// A short message shown in the pill (see IslandController+Live.swift).
+    @Published var alert: PillAlert?
+    var alertTask: Task<Void, Never>?
+    var alertedEventID: String?
 
     private var panel: IslandPanel!
     private var previousApp: NSRunningApplication?
@@ -94,8 +112,20 @@ final class IslandController: ObservableObject {
         clipboardLimit = Self.clipboardLimitChoices.contains(savedLimit) ? savedLimit : 200
 
         // All modules are on unless the user switched some off.
-        let saved = (defaults.stringArray(forKey: "enabledTabs") ?? []).compactMap(Tab.init(rawValue:))
-        enabledTabs = saved.isEmpty ? Set(Tab.allCases) : Set(saved)
+        // (Stored as the "off" list so modules added in later versions start switched on.)
+        let off = (defaults.stringArray(forKey: "disabledTabs") ?? []).compactMap(Tab.init(rawValue:))
+        let on = Set(Tab.allCases).subtracting(off)
+        enabledTabs = on.isEmpty ? Set(Tab.allCases) : on
+
+        var dataFolder = ClipboardHistory.defaultDirectory
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["ISLAND_SNAPSHOT"] != nil {
+            // Snapshots use throwaway data, never the real reminders or shelf.
+            dataFolder = FileManager.default.temporaryDirectory.appendingPathComponent("IslandSnapshot-\(UUID().uuidString)")
+        }
+        #endif
+        reminders = ReminderStore(directory: dataFolder)
+        shelf = ShelfStore(directory: dataFolder)
 
         clipboard = ClipboardMonitor(history: Self.makeClipboardHistory())
         clipboard.history.limit = clipboardLimit
@@ -131,6 +161,13 @@ final class IslandController: ObservableObject {
             .environmentObject(focus)
             .environmentObject(clipboard)
             .environmentObject(clipboard.history)
+            .environmentObject(reminders)
+            .environmentObject(shelf)
+            .environmentObject(nowPlaying)
+            .environmentObject(calendar)
+            .environmentObject(power)
+            .environmentObject(keepAwake)
+            .environmentObject(portsModel)
         let host = NSHostingView(rootView: root)
         host.sizingOptions = []
         panel.contentView = host
@@ -170,6 +207,7 @@ final class IslandController: ObservableObject {
         }
         #endif
         clipboard.start()
+        startLiveMonitors()
     }
 
     #if DEBUG
@@ -191,6 +229,9 @@ final class IslandController: ObservableObject {
                 .frame(width: geometry.pillSize.width, height: geometry.pillSize.height)
                 .background(Color.black)
                 .environmentObject(self).environmentObject(store).environmentObject(focus)
+                .environmentObject(clipboard).environmentObject(clipboard.history)
+                .environmentObject(reminders).environmentObject(shelf).environmentObject(nowPlaying)
+                .environmentObject(calendar).environmentObject(keepAwake)
                 .environment(\.colorScheme, .dark)
             let renderer = ImageRenderer(content: pill)
             renderer.scale = 2
@@ -229,6 +270,63 @@ final class IslandController: ObservableObject {
             write("settings-focus-off")
             setEnabled(.focus, true)
             collapse(restoreFocus: false)
+
+            // New modules, with made-up data.
+            try? await Task.sleep(for: .milliseconds(600))
+            nowPlaying.setForSnapshot(NowPlayingInfo(source: .spotify, title: "Midnight City", artist: "M83", isPlaying: true))
+            try? await Task.sleep(for: .milliseconds(400))
+            write("pill-music")
+            calendar.setForSnapshot(.init(id: "demo", title: "Design review",
+                                          start: Date().addingTimeInterval(540), end: Date().addingTimeInterval(2340),
+                                          joinURL: URL(string: "https://meet.google.com/demo")))
+            try? await Task.sleep(for: .milliseconds(400))
+            write("pill-meeting")
+            reminders.add(Reminder(title: "Call mom", fireDate: Date().addingTimeInterval(1200)))
+            shelf.add(["/Applications/Xcode.app", "/etc/hosts", "/System/Applications/Notes.app",
+                       "/System/Applications/Calculator.app", "/Library/Fonts"].map { URL(fileURLWithPath: $0) })
+            expand(tab: .now)
+            try? await Task.sleep(for: .milliseconds(900))
+            write("now")
+            tab = .shelf
+            try? await Task.sleep(for: .milliseconds(600))
+            write("shelf")
+            tab = .ports
+            try? await Task.sleep(for: .milliseconds(1800))
+            write("ports")
+            print("ports: \(portsModel.ports.count) found")
+            collapse(restoreFocus: false)
+            try? await Task.sleep(for: .milliseconds(600))
+
+            // Self-checks for the parts that touch the system.
+            let scheduled = addReminder(from: "in 1s self-check ping")
+            try? await Task.sleep(for: .milliseconds(2600))
+            let fired = reminders.fired.contains { $0.title == "Self-check ping" }
+            print("reminder: \(scheduled && fired ? "fired" : "DID NOT FIRE"), pill alert: \(alert?.text ?? "none")")
+            write("pill-alert")
+
+            keepAwake.set(true)
+            let pmset = Process()
+            pmset.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+            pmset.arguments = ["-g", "assertions"]
+            let pipe = Pipe()
+            pmset.standardOutput = pipe
+            try? pmset.run()
+            let assertions = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            print("keep-awake: \(assertions.contains("Island: Keep Awake") ? "system sees it" : "NOT REGISTERED")")
+            keepAwake.set(false)
+
+            let sample = NSImage(size: NSSize(width: 640, height: 120), flipped: false) { rect in
+                NSColor.white.setFill()
+                rect.fill()
+                ("Island reads text 12345" as NSString).draw(at: NSPoint(x: 20, y: 40), withAttributes: [
+                    .font: NSFont.systemFont(ofSize: 36), .foregroundColor: NSColor.black,
+                ])
+                return true
+            }
+            if let cg = sample.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                print("text-grab: read \"\(TextGrabber.recognizeText(in: cg))\"")
+            }
+            alert = nil
 
             // Hover check: a simulated "mouse entered the pill" should open the island, and since
             // the real mouse is elsewhere it should close again by itself.
@@ -335,10 +433,13 @@ final class IslandController: ObservableObject {
             guard enabledTabs.count > 1 else { return }
             enabledTabs.remove(module)
             if module == .focus { focus.reset() }
+            if module == .now { keepAwake.set(false) }
+            if module == .clipboard { clipboard.stackMode = false }
             if tab == module { tab = visibleTabs[0] }
         }
         clipboard.isEnabled = enabledTabs.contains(.clipboard)
-        UserDefaults.standard.set(visibleTabs.map(\.rawValue), forKey: "enabledTabs")
+        UserDefaults.standard.set(Tab.allCases.filter { !enabledTabs.contains($0) }.map(\.rawValue),
+                                  forKey: "disabledTabs")
     }
 
     func openSettings() {
@@ -435,7 +536,10 @@ final class IslandController: ObservableObject {
             self?.phaseFinished(finished)
         }
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.focus.tick() }
+            MainActor.assumeIsolated {
+                self?.focus.tick()
+                self?.tickLive()
+            }
         }
         timer.tolerance = 0.1
         RunLoop.main.add(timer, forMode: .common) // keep ticking while menus are open
@@ -444,6 +548,11 @@ final class IslandController: ObservableObject {
 
     private func phaseFinished(_ phase: FocusPhase) {
         if focusSound { NSSound(named: phase == .focus ? "Glass" : "Hero")?.play() }
+        glow()
+    }
+
+    /// Makes the island's outline glow for a moment.
+    func glow() {
         withAnimation(.easeInOut(duration: 0.3)) { flash = true }
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(2.4))
@@ -461,7 +570,7 @@ final class IslandController: ObservableObject {
 
         if showSettings {
             // Only the general shortcuts work while Settings is showing.
-            guard keyCode == 53 || flags == .command && [18, 19, 20, 43].contains(keyCode) else { return false }
+            guard keyCode == 53 || flags == .command && (Self.digitKeys + [43]).contains(keyCode) else { return false }
         }
 
         switch (keyCode, flags) {
@@ -475,9 +584,8 @@ final class IslandController: ObservableObject {
             commands.send(.saveCaptureAndClose)
         case (43, .command): // ⌘,
             showSettings.toggle()
-        case (18, .command), (19, .command), (20, .command): // ⌘1 ⌘2 ⌘3
-            let index = Int(keyCode) - 18
-            guard index < visibleTabs.count else { return false }
+        case (_, .command) where Self.digitKeys.contains(keyCode): // ⌘1 … ⌘6
+            guard let index = Self.digitKeys.firstIndex(of: keyCode), index < visibleTabs.count else { return false }
             tab = visibleTabs[index]
             showSettings = false
         case (49, []) where tab == .focus && !isEditingText: // Space
@@ -497,6 +605,9 @@ final class IslandController: ObservableObject {
         }
         return true
     }
+
+    /// Key codes of the number-row keys 1–6, in order.
+    private static let digitKeys: [UInt16] = [18, 19, 20, 21, 23, 22]
 
     private var isEditingText: Bool {
         panel.firstResponder is NSText

@@ -8,6 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: IslandController!
     private var hotKey: HotKey?
     private var clipboardHotKey: HotKey?
+    private var stackHotKey: HotKey?
+    private var grabHotKey: HotKey?
+    private var keepAwakeItem: NSMenuItem!
+    private var grabTextItem: NSMenuItem!
     private var statusItem: NSStatusItem!
     private var launchAtLoginItem: NSMenuItem!
     private var pauseClipboardItem: NSMenuItem!
@@ -34,6 +38,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSLog("Island: could not register ⌃⌥V (another app may be using it)")
         }
 
+        // ⌃⌥B pastes the next item from the paste stack; ⌃⌥T grabs text from the screen.
+        stackHotKey = HotKey(keyCode: kVK_ANSI_B, modifiers: controlKey | optionKey) { [weak self] in
+            self?.controller.pasteNextFromStack()
+        }
+        grabHotKey = HotKey(keyCode: kVK_ANSI_T, modifiers: controlKey | optionKey) { [weak self] in
+            guard let self, self.controller.isEnabled(.now) else { return }
+            self.controller.grabText()
+        }
+
         setUpStatusItem()
     }
 
@@ -57,6 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clipboardItem = clips
         pauseClipboardItem = menu.addItem(withTitle: "Pause Clipboard Recording",
                                           action: #selector(toggleClipboardPause), keyEquivalent: "")
+        let grab = NSMenuItem(title: "Grab Text from Screen", action: #selector(grabText), keyEquivalent: "t")
+        grab.keyEquivalentModifierMask = [.control, .option]
+        menu.addItem(grab)
+        grabTextItem = grab
+        keepAwakeItem = menu.addItem(withTitle: "Keep Awake", action: #selector(toggleKeepAwake), keyEquivalent: "")
         menu.addItem(withTitle: "Show Notes Folder", action: #selector(showNotesFolder), keyEquivalent: "")
         menu.addItem(.separator())
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -78,6 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clipboardItem.isHidden = !controller.isEnabled(.clipboard)
         pauseClipboardItem.isHidden = !controller.isEnabled(.clipboard)
         openOnHoverItem.state = controller.openOnHover ? .on : .off
+        keepAwakeItem.state = controller.keepAwake.isOn ? .on : .off
+        keepAwakeItem.isHidden = !controller.isEnabled(.now)
+        grabTextItem.isHidden = !controller.isEnabled(.now)
     }
 
     @objc private func openIsland() {
@@ -90,6 +111,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleClipboardPause() {
         controller.clipboard.isPaused.toggle()
+    }
+
+    @objc private func grabText() {
+        controller.grabText()
+    }
+
+    @objc private func toggleKeepAwake() {
+        controller.keepAwake.toggle()
     }
 
     @objc private func openSettings() {

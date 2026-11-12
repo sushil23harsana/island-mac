@@ -16,6 +16,20 @@ final class ClipboardMonitor: ObservableObject {
     /// False when the Clipboard module is turned off in Settings: nothing is recorded.
     var isEnabled = true
 
+    /// Paste stack: while on, every copy is also queued, and ⌃⌥B pastes them back one by one, oldest first.
+    @Published var stackMode = false {
+        didSet { if !stackMode { stack.removeAll() } }
+    }
+    @Published private(set) var stack: [ClipItem] = []
+
+    /// Takes the oldest queued item. Stack mode ends when the last one is taken.
+    func popStack() -> ClipItem? {
+        guard !stack.isEmpty else { return nil }
+        let item = stack.removeFirst()
+        if stack.isEmpty { stackMode = false }
+        return item
+    }
+
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount: Int
     private var timer: Timer?
@@ -51,6 +65,13 @@ final class ClipboardMonitor: ObservableObject {
         let types = Set(pasteboard.types ?? [])
         guard types.isDisjoint(with: Self.ignoredTypes) else { return }
         let source = NSWorkspace.shared.frontmostApplication?.localizedName
+        let newestBefore = history.items.first
+        defer {
+            // Something new was recorded: queue it if the paste stack is collecting.
+            if stackMode, let newest = history.items.first, newest != newestBefore {
+                stack.append(newest)
+            }
+        }
 
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
                                              options: [.urlReadingFileURLsOnly: true]) as? [URL],

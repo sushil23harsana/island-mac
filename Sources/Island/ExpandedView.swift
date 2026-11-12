@@ -19,6 +19,9 @@ struct ExpandedView: View {
                     case .notes: NotesView()
                     case .focus: FocusView()
                     case .clipboard: ClipboardView()
+                    case .shelf: ShelfView()
+                    case .now: NowView()
+                    case .ports: PortsView()
                     }
                 }
             }
@@ -92,11 +95,15 @@ struct ExpandedView: View {
                 Image(systemName: tab.symbol)
                     .symbolRenderingMode(.monochrome)
                     .font(.system(size: 11, weight: .semibold))
-                Text(tab.rawValue)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                // Only the selected tab shows its name, so six tabs fit beside the clock.
+                if selected {
+                    Text(tab.rawValue)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .fixedSize()
+                }
             }
             .foregroundStyle(selected ? tab.accent : .white.opacity(0.5))
-            .padding(.horizontal, 11)
+            .padding(.horizontal, selected ? 11 : 9)
             .padding(.vertical, 5)
             .background {
                 if selected {

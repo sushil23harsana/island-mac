@@ -7,6 +7,10 @@ enum Theme {
     static let focus = Color(red: 1.00, green: 0.56, blue: 0.24)
     static let rest = Color(red: 0.42, green: 0.90, blue: 0.74)
     static let clipboard = Color(red: 0.44, green: 0.72, blue: 1.00)
+    static let shelf = Color(red: 0.72, green: 0.58, blue: 1.00)
+    static let now = Color(red: 1.00, green: 0.47, blue: 0.62)
+    static let ports = Color(red: 0.45, green: 0.88, blue: 0.52)
+    static let alert = Color(red: 1.00, green: 0.40, blue: 0.36)
 }
 
 extension IslandController.Tab {
@@ -15,6 +19,9 @@ extension IslandController.Tab {
         case .notes: Theme.notes
         case .focus: Theme.focus
         case .clipboard: Theme.clipboard
+        case .shelf: Theme.shelf
+        case .now: Theme.now
+        case .ports: Theme.ports
         }
     }
 }

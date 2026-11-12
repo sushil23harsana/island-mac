@@ -102,6 +102,12 @@ struct SettingsView: View {
             if controller.isEnabled(.clipboard) {
                 ShortcutRow(keys: "⌃ ⌥ V", label: "Clipboard history")
             }
+            if controller.isEnabled(.clipboard) {
+                ShortcutRow(keys: "⌃ ⌥ B", label: "Paste next from stack")
+            }
+            if controller.isEnabled(.now) {
+                ShortcutRow(keys: "⌃ ⌥ T", label: "Grab text from screen")
+            }
             ShortcutRow(keys: "⌘ ,", label: "Settings")
             HStack {
                 Text("Island \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
@@ -135,6 +141,9 @@ private extension IslandController.Tab {
         case .notes: "Quick capture and Markdown notes"
         case .focus: "Pomodoro timer in the pill"
         case .clipboard: "Remember what you copy"
+        case .shelf: "Park files, drag them out later"
+        case .now: "Music, meetings, reminders, alerts"
+        case .ports: "See and stop local servers"
         }
     }
 }
@@ -214,7 +223,7 @@ private struct ShortcutRow: View {
     }
 }
 
-private struct LinkButton: View {
+struct LinkButton: View {
     let title: String
     let action: () -> Void
 

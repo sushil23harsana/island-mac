@@ -50,7 +50,8 @@ struct NotesView: View {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.notes)
-            TextField("Capture a thought…", text: $capture)
+            TextField(controller.isEnabled(.now) ? "Capture a thought…  or “in 20 min call mom”" : "Capture a thought…",
+                      text: $capture)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
                 .focused($focus, equals: .capture)
@@ -185,7 +186,13 @@ struct NotesView: View {
 
     private func saveCapture() {
         let text = capture.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let note = store.create(body: text) else { return }
+        guard !text.isEmpty else { return }
+        // "in 20 min call mom" becomes a reminder, not a note.
+        if controller.addReminder(from: text) {
+            capture = ""
+            return
+        }
+        guard let note = store.create(body: text) else { return }
         capture = ""
         query = ""
         selection = note.id

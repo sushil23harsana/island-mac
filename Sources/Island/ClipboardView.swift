@@ -69,6 +69,11 @@ struct ClipboardView: View {
                 }
                 SmallButton(title: "Cancel") { confirmClear = false }
             } else {
+                IconButton(symbol: monitor.stackMode ? "square.stack.3d.up.fill" : "square.stack.3d.up",
+                           help: "Paste stack: turn on, copy several things, then press ⌃⌥B to paste them one by one in order",
+                           tint: monitor.stackMode ? Theme.clipboard : nil) {
+                    monitor.stackMode.toggle()
+                }
                 IconButton(symbol: monitor.isPaused ? "play.circle" : "pause.circle",
                            help: monitor.isPaused ? "Resume recording copies" : "Pause recording copies",
                            tint: monitor.isPaused ? .orange : nil) {
@@ -129,7 +134,10 @@ struct ClipboardView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            if canAutoPaste {
+            if monitor.stackMode {
+                Text("Stack on · \(monitor.stack.count) queued · ⌃⌥B pastes the next one")
+                    .foregroundStyle(Theme.clipboard)
+            } else if canAutoPaste {
                 Text("⏎ paste · ⌘P pin · ⌘⌫ delete")
             } else {
                 Text("⏎ copies")
@@ -406,7 +414,7 @@ private enum Thumbnails {
 
 // MARK: - Small controls
 
-private struct IconButton: View {
+struct IconButton: View {
     let symbol: String
     let help: String
     var tint: Color? = nil
@@ -426,7 +434,7 @@ private struct IconButton: View {
     }
 }
 
-private struct SmallButton: View {
+struct SmallButton: View {
     let title: String
     var tint: Color? = nil
     let action: () -> Void
