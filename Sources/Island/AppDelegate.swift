@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var launchAtLoginItem: NSMenuItem!
     private var pauseClipboardItem: NSMenuItem!
+    private var openOnHoverItem: NSMenuItem!
+    private var clipboardItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller = IslandController()
@@ -52,10 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let clips = NSMenuItem(title: "Clipboard History", action: #selector(openClipboard), keyEquivalent: "v")
         clips.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(clips)
+        clipboardItem = clips
         pauseClipboardItem = menu.addItem(withTitle: "Pause Clipboard Recording",
                                           action: #selector(toggleClipboardPause), keyEquivalent: "")
         menu.addItem(withTitle: "Show Notes Folder", action: #selector(showNotesFolder), keyEquivalent: "")
         menu.addItem(.separator())
+        let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.keyEquivalentModifierMask = .command
+        openOnHoverItem = menu.addItem(withTitle: "Open on Hover", action: #selector(toggleOpenOnHover), keyEquivalent: "")
         launchAtLoginItem = menu.addItem(withTitle: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Island", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -69,6 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         launchAtLoginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         pauseClipboardItem.state = controller.clipboard.isPaused ? .on : .off
+        clipboardItem.isHidden = !controller.isEnabled(.clipboard)
+        pauseClipboardItem.isHidden = !controller.isEnabled(.clipboard)
+        openOnHoverItem.state = controller.openOnHover ? .on : .off
     }
 
     @objc private func openIsland() {
@@ -81,6 +90,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleClipboardPause() {
         controller.clipboard.isPaused.toggle()
+    }
+
+    @objc private func openSettings() {
+        controller.openSettings()
+    }
+
+    @objc private func toggleOpenOnHover() {
+        controller.openOnHover.toggle()
     }
 
     @objc private func showNotesFolder() {

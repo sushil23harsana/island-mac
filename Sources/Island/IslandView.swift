@@ -63,18 +63,28 @@ struct CollapsedView: View {
     @EnvironmentObject private var controller: IslandController
     @EnvironmentObject private var store: NotesStore
     @EnvironmentObject private var focus: FocusTimer
+    @EnvironmentObject private var history: ClipboardHistory
     @State private var hovered = false
 
-    private var showTimer: Bool { focus.isActive }
+    private var showTimer: Bool { focus.isActive && controller.isEnabled(.focus) }
+    /// What the pill shows when no timer is running: the first enabled module.
+    private var primary: IslandController.Tab { controller.visibleTabs[0] }
+    private var badge: String? {
+        switch primary {
+        case .notes: "\(store.notes.count)"
+        case .clipboard: "\(history.items.count)"
+        case .focus: nil
+        }
+    }
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: showTimer ? focus.phase.symbol : "note.text")
+            Image(systemName: showTimer ? focus.phase.symbol : primary.symbol)
                 .symbolRenderingMode(.monochrome)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(showTimer ? focus.phase.tint : Theme.notes)
+                .foregroundStyle(showTimer ? focus.phase.tint : primary.accent)
             if !controller.geometry.hasNotch {
-                Text(showTimer ? focus.phase.label : "Notes")
+                Text(showTimer ? focus.phase.label : primary.rawValue)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.9))
             }
@@ -84,8 +94,8 @@ struct CollapsedView: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.white.opacity(focus.isPaused ? 0.5 : 0.92))
                 MiniRing(progress: focus.progress, tint: focus.phase.tint, paused: focus.isPaused)
-            } else {
-                Text("\(store.notes.count)")
+            } else if let badge {
+                Text(badge)
                     .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.75))
                     .padding(.horizontal, 6)
@@ -97,7 +107,10 @@ struct CollapsedView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white.opacity(hovered ? 0.07 : 0))
         .contentShape(Rectangle())
-        .onHover { hovered = $0 }
+        .onHover {
+            hovered = $0
+            controller.pillHoverChanged($0)
+        }
         .animation(.easeOut(duration: 0.15), value: hovered)
         .onTapGesture { controller.expand() }
         .help("Open Island (⌥Space)")

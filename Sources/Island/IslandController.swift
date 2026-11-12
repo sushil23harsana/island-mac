@@ -38,8 +38,30 @@ final class IslandController: ObservableObject {
     @Published private(set) var mode: Mode = .collapsed
     @Published private(set) var geometry: IslandGeometry
     @Published var tab: Tab = .notes
+    @Published var showSettings = false
+
+    // Settings (all saved in UserDefaults)
+    /// Which modules are switched on. At least one always is.
+    @Published private(set) var enabledTabs: Set<Tab>
+    @Published var focusSound: Bool {
+        didSet { UserDefaults.standard.set(focusSound, forKey: "focus.sound") }
+    }
+    @Published var clipboardLimit: Int {
+        didSet {
+            UserDefaults.standard.set(clipboardLimit, forKey: "clipboard.limit")
+            clipboard.history.limit = clipboardLimit
+        }
+    }
+    static let clipboardLimitChoices = [50, 200, 500]
+
+    /// Enabled modules in display order.
+    var visibleTabs: [Tab] { Tab.allCases.filter(enabledTabs.contains) }
     /// Briefly true when a focus block or break ends, so the pill can glow.
     @Published private(set) var flash = false
+    /// Setting: open the island by resting the mouse on the pill (no click needed).
+    @Published var openOnHover: Bool {
+        didSet { UserDefaults.standard.set(openOnHover, forKey: "openOnHover") }
+    }
     let commands = PassthroughSubject<Command, Never>()
     let store = NotesStore()
     let focus = FocusTimer()
@@ -51,12 +73,34 @@ final class IslandController: ObservableObject {
     private var screenObserver: NSObjectProtocol?
     private var shrinkTask: Task<Void, Never>?
     private var ticker: Timer?
+    private var hoverOpenTask: Task<Void, Never>?
+    private var hoverWatch: Timer?
+    private var clickMonitor: Any?
+    /// True while the island was opened by hover and hasn't been used yet;
+    /// in that state it closes again when the mouse moves away.
+    private var openedByHover = false
+    /// After the island closes, hover-open waits until the mouse has left the pill once,
+    /// so pressing Esc with the mouse still on the pill doesn't reopen it straight away.
+    private var hoverArmed = true
     private var outsideClickMonitor: Any?
     private var appActivationObserver: NSObjectProtocol?
 
     init() {
         geometry = IslandGeometry(screen: IslandGeometry.preferredScreen() ?? NSScreen.main!)
+        let defaults = UserDefaults.standard
+        openOnHover = defaults.bool(forKey: "openOnHover")
+        focusSound = defaults.object(forKey: "focus.sound") as? Bool ?? true
+        let savedLimit = defaults.integer(forKey: "clipboard.limit")
+        clipboardLimit = Self.clipboardLimitChoices.contains(savedLimit) ? savedLimit : 200
+
+        // All modules are on unless the user switched some off.
+        let saved = (defaults.stringArray(forKey: "enabledTabs") ?? []).compactMap(Tab.init(rawValue:))
+        enabledTabs = saved.isEmpty ? Set(Tab.allCases) : Set(saved)
+
         clipboard = ClipboardMonitor(history: Self.makeClipboardHistory())
+        clipboard.history.limit = clipboardLimit
+        clipboard.isEnabled = enabledTabs.contains(.clipboard)
+        tab = visibleTabs[0]
     }
 
     private static func makeClipboardHistory() -> ClipboardHistory {
@@ -107,6 +151,14 @@ final class IslandController: ObservableObject {
                 self?.handleKey(keyCode: keyCode, flags: flags, inIsland: isOurs) ?? false
             }
             return handled ? nil : event
+        }
+
+        // Clicking inside a hover-opened island means "I'm using this": keep it open.
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            if event.window is IslandPanel {
+                MainActor.assumeIsolated { self?.keepOpenAfterHover() }
+            }
+            return event
         }
 
         startFocusTicker()
@@ -163,6 +215,32 @@ final class IslandController: ObservableObject {
             try? await Task.sleep(for: .milliseconds(700))
             write("collapsed-running")
             focus.reset()
+            try? await Task.sleep(for: .milliseconds(600))
+            openSettings()
+            try? await Task.sleep(for: .milliseconds(800))
+            write("settings")
+            setEnabled(.focus, false)
+            try? await Task.sleep(for: .milliseconds(500))
+            write("settings-focus-off")
+            setEnabled(.focus, true)
+            collapse(restoreFocus: false)
+
+            // Hover check: a simulated "mouse entered the pill" should open the island, and since
+            // the real mouse is elsewhere it should close again by itself.
+            try? await Task.sleep(for: .milliseconds(700))
+            openOnHover = true
+            pillHoverChanged(true)
+            try? await Task.sleep(for: .milliseconds(450))
+            print("hover-open: \(mode == .expanded ? "opened" : "DID NOT OPEN")")
+            try? await Task.sleep(for: .milliseconds(800))
+            print("hover-leave: \(mode == .collapsed ? "closed" : "DID NOT CLOSE")")
+            pillHoverChanged(false) // the mouse left, so hover-open is armed again
+            pillHoverChanged(true)
+            try? await Task.sleep(for: .milliseconds(450))
+            keepOpenAfterHover() // as if the user clicked inside
+            try? await Task.sleep(for: .milliseconds(800))
+            print("hover-then-click: \(mode == .expanded ? "stayed open" : "CLOSED")")
+            openOnHover = false
             NSApp.terminate(nil)
         }
     }
@@ -176,6 +254,7 @@ final class IslandController: ObservableObject {
 
     /// Opens straight to the clipboard; pressing the shortcut again closes it.
     func toggleClipboard() {
+        guard isEnabled(.clipboard) else { return }
         if mode == .expanded && tab == .clipboard {
             collapse(restoreFocus: true)
         } else {
@@ -184,7 +263,10 @@ final class IslandController: ObservableObject {
     }
 
     func expand(tab newTab: Tab? = nil) {
-        if let newTab { tab = newTab }
+        if let newTab, isEnabled(newTab) {
+            tab = newTab
+            showSettings = false
+        }
         guard mode == .collapsed else {
             commands.send(.focusCapture)
             return
@@ -206,6 +288,17 @@ final class IslandController: ObservableObject {
 
     func collapse(restoreFocus: Bool) {
         guard mode == .expanded else { return }
+        keepOpenAfterHover()
+        hoverArmed = false
+        showSettings = false
+        Task { @MainActor [weak self] in
+            // If the mouse is already elsewhere, there will be no "left the pill" event to wait for.
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self, self.mode == .collapsed else { return }
+            if !self.panel.frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) {
+                self.hoverArmed = true
+            }
+        }
         store.removeBlankNotes()
 
         withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
@@ -223,6 +316,82 @@ final class IslandController: ObservableObject {
             previousApp?.activate()
         }
         previousApp = nil
+    }
+
+    // MARK: - Modules
+
+    func isEnabled(_ tab: Tab) -> Bool { enabledTabs.contains(tab) }
+
+    /// Turns a module on or off. The last remaining module can't be turned off.
+    func setEnabled(_ module: Tab, _ on: Bool) {
+        if on {
+            enabledTabs.insert(module)
+        } else {
+            guard enabledTabs.count > 1 else { return }
+            enabledTabs.remove(module)
+            if module == .focus { focus.reset() }
+            if tab == module { tab = visibleTabs[0] }
+        }
+        clipboard.isEnabled = enabledTabs.contains(.clipboard)
+        UserDefaults.standard.set(visibleTabs.map(\.rawValue), forKey: "enabledTabs")
+    }
+
+    func openSettings() {
+        showSettings = true
+        if mode == .collapsed { expand() }
+    }
+
+    // MARK: - Open on hover
+
+    /// Called when the mouse enters or leaves the collapsed pill.
+    func pillHoverChanged(_ inside: Bool) {
+        hoverOpenTask?.cancel()
+        guard inside else {
+            hoverArmed = true
+            return
+        }
+        guard hoverArmed, openOnHover, mode == .collapsed else { return }
+        // Short delay so just passing over the pill on the way to the menu bar doesn't open it.
+        hoverOpenTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(160))
+            guard let self, !Task.isCancelled, self.mode == .collapsed, self.openOnHover else { return }
+            self.expand()
+            self.openedByHover = true
+            self.startHoverWatch()
+        }
+    }
+
+    /// While a hover-opened island is untouched, close it once the mouse has moved away.
+    private func startHoverWatch() {
+        hoverWatch?.invalidate()
+        var missesInARow = 0
+        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.openedByHover, self.mode == .expanded else { return }
+                missesInARow = self.mouseIsOverIsland ? 0 : missesInARow + 1
+                if missesInARow >= 2 { self.collapse(restoreFocus: true) }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hoverWatch = timer
+    }
+
+    private func keepOpenAfterHover() {
+        openedByHover = false
+        hoverWatch?.invalidate()
+        hoverWatch = nil
+    }
+
+    private var mouseIsOverIsland: Bool {
+        // The window is larger than the island (shadow margin), so shrink to the visible part,
+        // then allow a little slack around the edges.
+        let pad = IslandGeometry.shadowPadding
+        var rect = panel.frame
+        rect.origin.x += pad
+        rect.size.width -= pad * 2
+        rect.origin.y += pad
+        rect.size.height -= pad
+        return rect.insetBy(dx: -12, dy: -12).contains(NSEvent.mouseLocation)
     }
 
     /// Folds the island up when you click outside it or switch to another app.
@@ -269,7 +438,7 @@ final class IslandController: ObservableObject {
     }
 
     private func phaseFinished(_ phase: FocusPhase) {
-        NSSound(named: phase == .focus ? "Glass" : "Hero")?.play()
+        if focusSound { NSSound(named: phase == .focus ? "Glass" : "Hero")?.play() }
         withAnimation(.easeInOut(duration: 0.3)) { flash = true }
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(2.4))
@@ -282,7 +451,13 @@ final class IslandController: ObservableObject {
     /// Returns true when the key press was handled (and should be swallowed).
     private func handleKey(keyCode: UInt16, flags: NSEvent.ModifierFlags, inIsland: Bool) -> Bool {
         guard mode == .expanded, inIsland else { return false }
+        keepOpenAfterHover() // typing counts as using the island
         let flags = flags.intersection([.command, .option, .control, .shift])
+
+        if showSettings {
+            // Only the general shortcuts work while Settings is showing.
+            guard keyCode == 53 || flags == .command && [18, 19, 20, 43].contains(keyCode) else { return false }
+        }
 
         switch (keyCode, flags) {
         case (53, []): // Esc
@@ -293,12 +468,13 @@ final class IslandController: ObservableObject {
             commands.send(.focusSearch)
         case (36, .command) where tab == .notes: // ⌘Return
             commands.send(.saveCaptureAndClose)
-        case (18, .command): // ⌘1
-            tab = .notes
-        case (19, .command): // ⌘2
-            tab = .focus
-        case (20, .command): // ⌘3
-            tab = .clipboard
+        case (43, .command): // ⌘,
+            showSettings.toggle()
+        case (18, .command), (19, .command), (20, .command): // ⌘1 ⌘2 ⌘3
+            let index = Int(keyCode) - 18
+            guard index < visibleTabs.count else { return false }
+            tab = visibleTabs[index]
+            showSettings = false
         case (49, []) where tab == .focus && !isEditingText: // Space
             focus.toggle()
         case (125, []) where tab == .clipboard: // ↓

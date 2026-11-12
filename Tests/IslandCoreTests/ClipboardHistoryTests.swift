@@ -49,6 +49,14 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(Set(h.items.map(\.text)), ["old pinned", "2", "3"])
     }
 
+    func testLoweringLimitTrimsExistingHistory() {
+        let h = makeHistory(limit: 10)
+        for i in 1...5 { h.addText("item \(i)") }
+        h.limit = 2
+        XCTAssertEqual(h.items.map(\.text), ["item 5", "item 4"])
+        XCTAssertEqual(makeHistory().items.count, 2)
+    }
+
     func testSearchPutsPinnedFirst() {
         let h = makeHistory()
         h.addText("git push origin main")

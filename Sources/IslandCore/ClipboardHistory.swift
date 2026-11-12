@@ -72,7 +72,13 @@ public final class ClipboardHistory: ObservableObject {
     @Published public private(set) var items: [ClipItem] = []
 
     /// Most unpinned items kept. Pinned items are never trimmed.
-    public let limit: Int
+    public var limit: Int {
+        didSet {
+            guard limit != oldValue else { return }
+            trim()
+            save()
+        }
+    }
     /// Texts longer than this are skipped (huge logs, base64 blobs…).
     public static let maxTextLength = 500_000
     /// Images larger than this are skipped.

@@ -5,6 +5,8 @@ A floating "dynamic island" for the Mac that lives at the top-center of your scr
 - **⌥Space** anywhere opens the island with the cursor in the capture bar
 - **⏎** saves a quick note · **⌘⏎** saves and closes · **Esc** closes and returns you to your previous app
 - **⌘N** new note · **⌘F** search · right-click a note → Show in Finder / Move to Trash
+- **Settings** (gear button in the island, or **⌘,**): switch the Notes, Focus and Clipboard modules on or off, and set open on hover, launch at login, the timer sound and how much clipboard history to keep.
+- **Open on Hover** (Settings, or menu bar icon → Open on Hover): rest the mouse on the pill and it opens; move away and it closes. Once you click or type in it, it stays open until you press Esc or click elsewhere.
 - **⌃⌥V** anywhere opens Clipboard history directly
 - **⌘1 / ⌘2 / ⌘3** switch between Notes, Focus and Clipboard
 - **Focus**: 25/5, 50/10 or 15/3 Pomodoro blocks. **Space** starts or pauses. Breaks start automatically, and a sound plus a glow on the pill tells you when a block ends. While it runs, the pill shows the countdown and a progress line. You also see today's sessions and minutes focused.
@@ -41,4 +43,4 @@ Dev aid: `ISLAND_SNAPSHOT=/some/dir .build/debug/Island` writes PNGs of each isl
 - `Sources/Island/HotKey.swift`: global ⌥Space / ⌃⌥V via Carbon (no Accessibility permission needed)
 - `Sources/Island/ClipboardMonitor.swift`: watches the pasteboard, skips secrets, copies back and auto-pastes
 - `Sources/Island/Theme.swift`: colors, card/field/row surfaces and the notch-style island shape
-- `Sources/Island/IslandView.swift` (pill), `ExpandedView.swift` (tabs), `NotesView.swift`, `FocusView.swift`, `ClipboardView.swift`: SwiftUI UI
+- `Sources/Island/IslandView.swift` (pill), `ExpandedView.swift` (tabs), `NotesView.swift`, `FocusView.swift`, `ClipboardView.swift`, `SettingsView.swift`: SwiftUI UI

@@ -12,30 +12,38 @@ struct ExpandedView: View {
             header
                 .padding(.bottom, 8)
             Group {
-                switch controller.tab {
-                case .notes: NotesView()
-                case .focus: FocusView()
-                case .clipboard: ClipboardView()
+                if controller.showSettings {
+                    SettingsView()
+                } else {
+                    switch controller.tab {
+                    case .notes: NotesView()
+                    case .focus: FocusView()
+                    case .clipboard: ClipboardView()
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .id(controller.tab)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .id(controller.showSettings ? "settings" : controller.tab.rawValue)
             .transition(.opacity)
         }
         .padding(.horizontal, 16 + IslandGeometry.expandedEar)
         .padding(.bottom, 16)
         .animation(.easeOut(duration: 0.16), value: controller.tab)
+        .animation(.easeOut(duration: 0.16), value: controller.showSettings)
     }
 
     private var header: some View {
         HStack(spacing: 2) {
-            ForEach(IslandController.Tab.allCases, id: \.self) { tab in
+            ForEach(controller.visibleTabs, id: \.self) { tab in
                 tabButton(tab)
             }
             Spacer(minLength: controller.geometry.notchWidth + 20)
-            if focus.isActive && controller.tab != .focus {
+            if focus.isActive && controller.isEnabled(.focus) && (controller.tab != .focus || controller.showSettings) {
                 // Keep an eye on the timer from the other tabs.
-                Button { controller.tab = .focus } label: {
+                Button {
+                    controller.tab = .focus
+                    controller.showSettings = false
+                } label: {
                     HStack(spacing: 5) {
                         Image(systemName: focus.phase.symbol)
                             .symbolRenderingMode(.monochrome)
@@ -56,14 +64,30 @@ struct ExpandedView: View {
             Text(Date.now, style: .time)
                 .font(.system(size: 12, weight: .medium, design: .rounded).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.5))
+            Button { controller.showSettings.toggle() } label: {
+                Image(systemName: "gearshape.fill")
+                    .symbolRenderingMode(.monochrome)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(controller.showSettings ? 0.95 : 0.5))
+                    .frame(width: 26, height: 24)
+                    .background(Capsule().fill(.white.opacity(controller.showSettings ? 0.16 : 0)))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 4)
+            .help("Settings (⌘,)")
         }
         .frame(height: max(controller.geometry.pillSize.height, 34))
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: controller.tab)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: controller.visibleTabs)
     }
 
     private func tabButton(_ tab: IslandController.Tab) -> some View {
-        let selected = controller.tab == tab
-        return Button { controller.tab = tab } label: {
+        let selected = controller.tab == tab && !controller.showSettings
+        return Button {
+            controller.tab = tab
+            controller.showSettings = false
+        } label: {
             HStack(spacing: 5) {
                 Image(systemName: tab.symbol)
                     .symbolRenderingMode(.monochrome)
@@ -86,6 +110,6 @@ struct ExpandedView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("\(tab.rawValue) (⌘\(IslandController.Tab.allCases.firstIndex(of: tab)! + 1))")
+        .help("\(tab.rawValue) (⌘\((controller.visibleTabs.firstIndex(of: tab) ?? 0) + 1))")
     }
 }

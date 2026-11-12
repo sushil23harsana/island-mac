@@ -13,6 +13,9 @@ final class ClipboardMonitor: ObservableObject {
         didSet { UserDefaults.standard.set(isPaused, forKey: "clipboard.paused") }
     }
 
+    /// False when the Clipboard module is turned off in Settings: nothing is recorded.
+    var isEnabled = true
+
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount: Int
     private var timer: Timer?
@@ -43,7 +46,7 @@ final class ClipboardMonitor: ObservableObject {
     private func check() {
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
-        guard !isPaused else { return }
+        guard isEnabled, !isPaused else { return }
 
         let types = Set(pasteboard.types ?? [])
         guard types.isDisjoint(with: Self.ignoredTypes) else { return }
